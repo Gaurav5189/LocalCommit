@@ -1,0 +1,27 @@
+{
+  "name": "localcommit",
+  "version": "1.0.0",
+  "description": "Local-first CLI for generating conventional commit messages via Ollama",
+  "main": "dist/index.js",
+  "bin": {
+    "localcommit": "bin/localcommit.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node bin/localcommit.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["cli", "git", "ollama", "local-ai", "commit"],
+  "license": "MIT"
+}
