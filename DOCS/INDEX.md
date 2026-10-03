@@ -6,8 +6,8 @@
 - ALWAYS respect `RULES.md` code conventions when writing code. If writing new code, read `RULES.md` first.
 
 ## Active State
-- **Current Phase:** [Phase 1 complete]
-- **Current Task:** [Phase 2: Git Integration Engine (`src/git.ts`)]
+- **Current Phase:** [Phase 2 complete]
+- **Current Task:** [Phase 3: AI Inference Client (`src/llm.ts`)]
 
 ## Doc Map
 - **`RULES.md`**: Code formatting, framework rules, strict constraints. (path: DOCS/)

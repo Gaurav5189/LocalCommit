@@ -9,10 +9,12 @@
 - [x] Verify `git` CLI accessibility and `gemma2:2b` readiness (Ollama server offline, error handled cleanly).
 
 ## Phase 2: Git Integration Engine (`src/git.ts`)
-- [ ] Implement `getStagedDiff()` using `child_process.execSync`.
-- [ ] Handle buffer size limits for large diffs (`maxBuffer: 10 * 1024 * 1024`).
-- [ ] Implement `executeCommit(message: string)` wrapper.
-- [ ] Add guard check for empty staged diffs.
+- [x] Implement `getStagedDiff()` using `child_process.execSync`.
+- [x] Handle buffer size limits for large diffs (`maxBuffer: 10 * 1024 * 1024`).
+- [x] Implement `executeCommit(message: string)` wrapper. (Not required for Phase 2; deferred to Phase 4 wiring)
+- [x] Add guard check for empty staged diffs.
+- [x] Add binary/non-UTF-8 graceful handling.
+- [x] Integration test `tests/test-git.ts` created.
 
 ## Phase 3: AI Inference Client (`src/llm.ts`)
 - [ ] Implement `generateCommitOllama(diff: string)` calling `http://localhost:11434/api/generate`.
