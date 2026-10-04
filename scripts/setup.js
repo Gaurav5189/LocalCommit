@@ -44,18 +44,18 @@ function checkNodeAndGit() {
 }
 
 function checkOllama() {
-  // Try localhost, then 127.0.0.1, then OLLAMA_HOST env var (common in containers).
+  // Try OLLAMA_HOST env var, then localhost, then 127.0.0.1.
   const hosts = [
     process.env.OLLAMA_HOST ? process.env.OLLAMA_HOST : null,
     "http://localhost:11434",
     "http://127.0.0.1:11434",
   ].filter(Boolean);
 
-  function tryHost(url) {
+  function tryHost(base) {
     return new Promise((resolve) => {
       try {
-        const urlObj = new URL(url);
-        const req = http.get(urlObj.toString() + "/api/tags", (res) => {
+        const url = new URL("/api/tags", base).toString();
+        const req = http.get(url, (res) => {
           let data = "";
           res.on("data", (chunk) => (data += chunk));
           res.on("end", () => {
@@ -80,8 +80,8 @@ function checkOllama() {
   }
 
   return new Promise(async (resolve) => {
-    for (const url of hosts) {
-      const result = await tryHost(url);
+    for (const base of hosts) {
+      const result = await tryHost(base);
       if (result.online) {
         resolve(result);
         return;

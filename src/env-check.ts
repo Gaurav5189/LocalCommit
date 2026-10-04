@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { checkOllamaReachable } from "./ollama-client.js";
 
 function getExpectedModel(): string {
   try {
@@ -27,16 +28,17 @@ function checkGit(): void {
 
 async function checkOllama(): Promise<void> {
   try {
-    const response = await fetch("http://localhost:11434/api/tags", {
+    const baseUrl = await checkOllamaReachable();
+    const response = await fetch(new URL("/api/tags", baseUrl).toString(), {
       method: "GET",
     });
 
     if (!response.ok) {
-      fail(`Ollama server at http://localhost:11434 responded with status ${response.status}. Ensure 'ollama serve' is running.`);
+      fail(`Ollama server at ${baseUrl} responded with status ${response.status}. Ensure 'ollama serve' is running.`);
     }
 
     const data = (await response.json()) as { models?: Array<{ name?: string }> };
-    console.log("[env-check] Ollama server is running at http://localhost:11434.");
+    console.log(`[env-check] Ollama server is running at ${baseUrl}.`);
 
     const models = data.models || [];
     const modelNames = models.map((m) => m.name || "");

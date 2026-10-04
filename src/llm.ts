@@ -1,5 +1,5 @@
-const OLLAMA_CHAT_URL = "http://localhost:11434/api/chat";
-const OLLAMA_API_URL = "http://localhost:11434/api";
+import { getOllamaHosts } from "./ollama-client.js";
+
 const TIMEOUT_MS = 90 * 1000; // 90s hard cap for a single request
 const FINAL_TIMEOUT_MS = 90 * 1000; // 90s for the final commit generation
 
@@ -50,47 +50,53 @@ function debug(message: string): void {
  * Returns context window in tokens, or null if unavailable.
  */
 async function getModelContextWindow(model: string): Promise<number | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(`${OLLAMA_API_URL}/show`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!response.ok) return null;
-    const data = (await response.json()) as Record<string, unknown>;
+  const hosts = getOllamaHosts();
+  for (const base of hosts) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const url = new URL("/api/show", base).toString();
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) continue;
+      const data = (await response.json()) as Record<string, unknown>;
 
-    // Newer Ollama exposes "parameters" as a string with "num_ctx N"
-    if (typeof data.parameters === "string") {
-      const match = data.parameters.match(/num_ctx\s+(\d+)/);
-      if (match) return parseInt(match[1], 10);
-    }
+      // Newer Ollama exposes "parameters" as a string with "num_ctx N"
+      if (typeof data.parameters === "string") {
+        const match = data.parameters.match(/num_ctx\s+(\d+)/);
+        if (match) return parseInt(match[1], 10);
+      }
 
-    // model_info holds architecture metadata such as "qwen2.context_length"
-    const modelInfo = data.model_info as Record<string, unknown> | undefined;
-    if (modelInfo) {
-      for (const [key, value] of Object.entries(modelInfo)) {
-        if (key.endsWith(".context_length") && typeof value === "number" && value > 0) {
-          return value;
+      // model_info holds architecture metadata such as "qwen2.context_length"
+      const modelInfo = data.model_info as Record<string, unknown> | undefined;
+      if (modelInfo) {
+        for (const [key, value] of Object.entries(modelInfo)) {
+          if (key.endsWith(".context_length") && typeof value === "number" && value > 0) {
+            return value;
+          }
         }
       }
-    }
 
-    // Fallbacks for other Ollama versions
-    if (typeof data.num_ctx === "number" && data.num_ctx > 0) {
-      return data.num_ctx;
+      // Fallbacks for other Ollama versions
+      if (typeof data.num_ctx === "number" && data.num_ctx > 0) {
+        return data.num_ctx;
+      }
+      const params = data.parameters as Record<string, unknown> | undefined;
+      if (params && typeof params.num_ctx === "number" && params.num_ctx > 0) {
+        return params.num_ctx;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeoutId);
+      // Try next host
     }
-    const params = data.parameters as Record<string, unknown> | undefined;
-    if (params && typeof params.num_ctx === "number" && params.num_ctx > 0) {
-      return params.num_ctx;
-    }
-    return null;
-  } catch {
-    return null;
   }
+  return null;
 }
 
 /**
@@ -99,29 +105,35 @@ async function getModelContextWindow(model: string): Promise<number | null> {
  * defaults to 4096 tokens unless the user raises OLLAMA_CONTEXT_LENGTH).
  */
 async function getRunningContextWindow(model: string): Promise<number | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(`${OLLAMA_API_URL}/ps`, {
-      method: "GET",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!response.ok) return null;
-    const data = (await response.json()) as {
-      models?: Array<{ name?: string; model?: string; context_length?: number }>;
-    };
-    const base = model.includes(":") ? model : `${model}:latest`;
-    const running = (data.models || []).find(
-      (m) => m.name === model || m.name === base || m.model === model || m.model === base
-    );
-    if (running && typeof running.context_length === "number" && running.context_length > 0) {
-      return running.context_length;
+  const hosts = getOllamaHosts();
+  for (const base of hosts) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const url = new URL("/api/ps", base).toString();
+      const response = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) continue;
+      const data = (await response.json()) as {
+        models?: Array<{ name?: string; model?: string; context_length?: number }>;
+      };
+      const baseName = model.includes(":") ? model : `${model}:latest`;
+      const running = (data.models || []).find(
+        (m) => m.name === model || m.name === baseName || m.model === model || m.model === baseName
+      );
+      if (running && typeof running.context_length === "number" && running.context_length > 0) {
+        return running.context_length;
+      }
+      return null;
+    } catch {
+      clearTimeout(timeoutId);
+      // Try next host
     }
-    return null;
-  } catch {
-    return null;
   }
+  return null;
 }
 
 /**
@@ -314,42 +326,61 @@ async function chat(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), Math.max(1000, opts.timeoutMs));
 
+  const body = JSON.stringify({
+    model: MODEL,
+    messages,
+    stream: false,
+    keep_alive: "10m",
+    options: {
+      temperature: opts.temperature ?? 0.1,
+      num_predict: opts.numPredict,
+    },
+  });
+
   try {
-    const response = await fetch(OLLAMA_CHAT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        messages,
-        stream: false,
-        keep_alive: "10m",
-        options: {
-          temperature: opts.temperature ?? 0.1,
-          num_predict: opts.numPredict,
-        },
-      }),
-      signal: controller.signal,
-    });
+    // Try each candidate host until one works
+    const hosts = getOllamaHosts();
+    let lastErr: unknown;
+    for (const base of hosts) {
+      try {
+        const url = new URL("/api/chat", base).toString();
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal: controller.signal,
+        });
 
-    clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const bodyText = await response.text();
-      throw new Error(`Ollama returned status ${response.status}: ${bodyText}`);
+        if (!response.ok) {
+          const bodyText = await response.text();
+          throw new Error(`Ollama returned status ${response.status}: ${bodyText}`);
+        }
+
+        const data = (await response.json()) as { message?: { content?: string } };
+        return (data.message?.content || "").trim();
+      } catch (err) {
+        lastErr = err;
+        // If it's a timeout/abort, don't try next host
+        if (err instanceof Error && err.name === "AbortError") {
+          throw new Error("Error: Ollama request timed out.");
+        }
+        // Try next host
+      }
     }
-
-    const data = (await response.json()) as { message?: { content?: string } };
-    return (data.message?.content || "").trim();
+    // All hosts failed
+    throw lastErr;
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Error: Ollama request timed out.");
     }
     if (err instanceof TypeError && err.message.includes("fetch")) {
-      throw new Error("Error: Could not connect to Ollama at http://localhost:11434. Ensure 'ollama serve' is running.");
+      throw new Error("Error: Could not connect to Ollama. Ensure 'ollama serve' is running.");
     }
     if (err instanceof Error && /ECONNREFUSED|ECONNRESET|fetch failed/.test(err.message)) {
-      throw new Error("Error: Could not connect to Ollama at http://localhost:11434. Ensure 'ollama serve' is running.");
+      throw new Error("Error: Could not connect to Ollama. Ensure 'ollama serve' is running.");
     }
     throw err;
   }
