@@ -355,6 +355,14 @@ async function chat(
 
         if (!response.ok) {
           const bodyText = await response.text();
+          // Special case: model not found - guide user to run setup
+          if (response.status === 404 && bodyText.includes("not found")) {
+            throw new Error(
+              `Model '${MODEL}' not found in Ollama.\n` +
+                `Run 'npm run setup' to pull it automatically, or manually:\n` +
+                `  ollama pull ${MODEL}`
+            );
+          }
           throw new Error(`Ollama returned status ${response.status}: ${bodyText}`);
         }
 
