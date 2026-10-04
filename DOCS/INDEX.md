@@ -6,8 +6,8 @@
 - ALWAYS respect `RULES.md` code conventions when writing code. If writing new code, read `RULES.md` first.
 
 ## Active State
-- **Current Phase:** [Phase 5 complete — RELEASE READY]
-- **Current Task:** [Project finalized. End-to-end pipeline verified.]
+- **Current Phase:** [Phase 5 complete — RELEASE READY] + Setup Script & BIS docs added
+- **Current Task:** Cross-platform setup, package script, README BIS chart, and Ollama instructions in the root `INSTRUCTION.md`.
 
 ## Doc Map
 - **`RULES.md`**: Code formatting, framework rules, strict constraints. (path: DOCS/)

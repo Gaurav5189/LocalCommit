@@ -1,8 +1,6 @@
 import { execSync } from "child_process";
 
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB
-const MAX_DIFF_BYTES = 32 * 1024; // 32KB
-const MAX_DIFF_TOKENS = 8000;
 
 function isInsideGitRepo(): boolean {
   try {
@@ -46,12 +44,6 @@ export function getStagedDiff(): string {
   if (diff.trim().length === 0) {
     console.log("No staged changes found. Run 'git add <files>' first.");
     return "";
-  }
-
-  // Truncate if exceeds 32KB or ~8000 tokens
-  const byteLength = Buffer.byteLength(diff, "utf-8");
-  if (byteLength > MAX_DIFF_BYTES || diff.length > MAX_DIFF_TOKENS) {
-    diff = diff.slice(0, MAX_DIFF_BYTES) + "\n[Diff truncated due to length]";
   }
 
   return diff;

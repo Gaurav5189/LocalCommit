@@ -1,4 +1,15 @@
 import { execSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+
+function getExpectedModel(): string {
+  try {
+    const filePath = path.join(__dirname, "..", "model");
+    return fs.readFileSync(filePath, "utf-8").trim();
+  } catch {
+    return "qwen2.5-coder:3b";
+  }
+}
 
 function fail(message: string): never {
   console.error(`[env-check] ERROR: ${message}`);
@@ -30,10 +41,11 @@ async function checkOllama(): Promise<void> {
     const models = data.models || [];
     const modelNames = models.map((m) => m.name || "");
 
-    if (modelNames.includes("gemma2:2b")) {
-      console.log("[env-check] Model 'gemma2:2b' is present and ready.");
+    const expectedModel = getExpectedModel();
+    if (modelNames.includes(expectedModel)) {
+      console.log(`[env-check] Model '${expectedModel}' is present and ready.`);
     } else {
-      console.warn("[env-check] WARNING: Model 'gemma2:2b' not found in Ollama tags. Expected pre-installed locally.");
+      console.warn(`[env-check] WARNING: Model '${expectedModel}' not found in Ollama tags. Expected pre-installed locally.`);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
