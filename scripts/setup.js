@@ -101,11 +101,10 @@ async function main() {
   }
   log("Ollama server is running.");
 
-  // Match both exact name and name with an implicit ":latest" tag.
+  // Match exact tag, or exact base with implicit :latest when no tag given.
   const installed =
     ollamaStatus.models.includes(model) ||
-    ollamaStatus.models.includes(`${model}:latest`) ||
-    (model.includes(":") && ollamaStatus.models.includes(model.split(":")[0]));
+    (!model.includes(":") && ollamaStatus.models.includes(`${model}:latest`));
 
   if (!installed) {
     try {
