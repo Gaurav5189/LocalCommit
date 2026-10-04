@@ -44,25 +44,50 @@ function checkNodeAndGit() {
 }
 
 function checkOllama() {
-  return new Promise((resolve) => {
-    const req = http.get("http://localhost:11434/api/tags", (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const parsed = JSON.parse(data);
-          const modelNames = (parsed.models || []).map((m) => m.name || "");
-          resolve({ online: true, models: modelNames });
-        } catch {
-          resolve({ online: false, models: [] });
-        }
-      });
+  // Try localhost, then 127.0.0.1, then OLLAMA_HOST env var (common in containers).
+  const hosts = [
+    process.env.OLLAMA_HOST ? process.env.OLLAMA_HOST : null,
+    "http://localhost:11434",
+    "http://127.0.0.1:11434",
+  ].filter(Boolean);
+
+  function tryHost(url) {
+    return new Promise((resolve) => {
+      try {
+        const urlObj = new URL(url);
+        const req = http.get(urlObj.toString() + "/api/tags", (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            try {
+              const parsed = JSON.parse(data);
+              const modelNames = (parsed.models || []).map((m) => m.name || "");
+              resolve({ online: true, models: modelNames, url });
+            } catch {
+              resolve({ online: false, models: [], url });
+            }
+          });
+        });
+        req.on("error", () => resolve({ online: false, models: [], url }));
+        req.setTimeout(3000, () => {
+          req.abort();
+          resolve({ online: false, models: [], url });
+        });
+      } catch {
+        resolve({ online: false, models: [], url });
+      }
     });
-    req.on("error", () => resolve({ online: false, models: [] }));
-    req.setTimeout(3000, () => {
-      req.abort();
-      resolve({ online: false, models: [] });
-    });
+  }
+
+  return new Promise(async (resolve) => {
+    for (const url of hosts) {
+      const result = await tryHost(url);
+      if (result.online) {
+        resolve(result);
+        return;
+      }
+    }
+    resolve({ online: false, models: [] });
   });
 }
 
@@ -119,6 +144,37 @@ async function main() {
 
   log("Installing dependencies...");
   execSync("npm install", { stdio: "inherit" });
+
+  // Ensure TypeScript (and ts-node) are present; the cli relies on both.
+  let tsPresent = false;
+  try {
+    require.resolve("typescript");
+    tsPresent = true;
+  } catch {
+    // not present
+  }
+  if (!tsPresent) {
+    log("TypeScript not found after install. Installing --save-dev typescript ts-node...");
+    try {
+      execSync("npm install --save-dev typescript ts-node @types/node", { stdio: "inherit" });
+      try { require.resolve("typescript"); tsPresent = true; } catch {}
+    } catch (e) {
+      log("Automatic TypeScript installation failed.");
+      const cmd = "npm install --save-dev typescript ts-node @types/node";
+      if (process.platform === "win32") {
+        logError(`Please install manually (Windows CMD / PowerShell):\n  ${cmd}`);
+      } else {
+        logError(`Please install manually (macOS / Linux):\n  ${cmd}`);
+      }
+      process.exit(1);
+    }
+  }
+  if (tsPresent) {
+    log("TypeScript OK.");
+  } else {
+    logError("TypeScript is still missing after installation attempt.");
+    process.exit(1);
+  }
 
   log("Building TypeScript...");
   execSync("npm run build", { stdio: "inherit" });
